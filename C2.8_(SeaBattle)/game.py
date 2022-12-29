@@ -215,6 +215,7 @@ class User(Player):
 class Game:
     def __init__(self, size=10):
         self.size = size
+        self.lens = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
         player = self.random_board()
         comp = self.random_board()
         comp.hid = True
@@ -223,10 +224,9 @@ class Game:
         self.us = User(player, comp)
 
     def try_board(self):
-        lens = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
         board = Board(size=self.size)
         attempts = 0
-        for _ in lens:
+        for _ in self.lens:
             while True:
                 attempts += 1
                 if attempts > 5000:
