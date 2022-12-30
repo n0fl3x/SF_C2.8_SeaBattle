@@ -1,23 +1,16 @@
-from random import randint as rndt
+from random import randint as r_int
 
 
 class Dot:
     """Класс для определения координат точки на игровом поле."""
-
-    # У любой точки 2 координаты - x и y.
     def __init__(self, x, y):
         self.x = x
         self.y = y
 
-    # Переопределяем стандартный метод __eq__, чтобы было удобнее сравнивать точки между собой и определять
-    # находится ли координаты той или иной точки в каком-либо списке координат с помощью оператора in.
-    # До переопределения сравнивали id, а теперь сами значения координат.
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
 
-    # Переопределяем стандартный метод __str__, чтобы удобнее выводить координаты точки в читаемом виде
-    # через функцию print: (x, y).
-    def __repr__(self):
+    def __str__(self):
         return f"({self.x}, {self.y})"
 
 
@@ -29,53 +22,55 @@ class BoardException(Exception):
 
 
 class BoardOutException(BoardException):
-    """Класс-наследник BoardException, который отвечает за попытку сделать выстрел за пределы
-    игрового поля."""
+    """Класс-наследник BoardException, который выбрасывает исключение при попытке
+    сделать выстрел за пределы игрового поля."""
     def __str__(self):
-        return "Вы пытаетесь выстрелить за пределы игрового поля!"
+        return " You're trying to shoot out of range of game field!"
 
 
 class BoardUsedException(BoardException):
-    """Класс-наследник BoardException, который отвечает за попытку сделать выстрел точку,
-    в которую уже производился выстрел."""
+    """Класс-наследник BoardException. Выбрасывает исключение при попытке сделать
+    выстрел в точку, в которую уже стреляли."""
     def __str__(self):
-        return "Вы уже стреляли в эту клетку!"
+        return " You have already shoot at this sector!"
 
 
 class BoardWrongShipException(BoardException):
-    """Класс-наследник BoardException, который задаётся НЕ для вывода пользователю,
-    а для исключения при неверной расстановке кораблей на игровое поле."""
+    """Класс-наследник BoardException, отвечающий за исключение
+    при неверной расстановке кораблей на игровое поле."""
     pass
 
 
 class Ship:
     """Класс для описания свойств и методов кораблей."""
-    def __init__(self, bow, length, orient):
-        self.bow = bow  # точка нахождения носа корабля
+    def __init__(self, nose, length, orient):
+        self.nose = nose  # точка нахождения носа корабля
         self.length = length  # длина корабля (сколько палуб)
-        self.orient = orient  # ориентация корабля (вертикальная/горизонтальная)
-        self.lives = length  # количество "жизней" корабля (сколько ещё не подбитых палуб) = длине корабля
+        self.orient = orient  # ориентация корабля (0 - вертикальная / 1 - горизонтальная)
+        self.lives = length  # количество "жизней" корабля (сколько ещё не подбитых палуб),
+                             # по-умолчанию = длине корабля
 
     @property
     def dots(self):
-        """Метод, возвращающий список всех точек корабля."""
+        """Метод-свойство, возвращающий список всех точек одного корабля."""
         ship_dots = []
         for i in range(self.length):
-            cur_x = self.bow.x
-            cur_y = self.bow.y
+            current_x = self.nose.x
+            current_y = self.nose.y
             if self.orient == 0:
-                cur_x += i
-            elif self.orient == 1:
-                cur_y += i
-            ship_dots.append(Dot(cur_x, cur_y))
+                current_x += i
+            if self.orient == 1:
+                current_y += i
+            ship_dots.append(Dot(current_x, current_y))
         return ship_dots
 
     def shooten(self, shot):
+        """Метод проверки попадания в конкретный корабль."""
         return shot in self.dots
 
 
 class Board:
-    """Класс для описания игровой доски."""
+    """Класс для описания игрового поля."""
     def __init__(self, hid=False, size=10):
         self.size = size  # размер игрового поля
         self.hid = hid  # этим мы определяем скрывать или показывать корабли на экране
@@ -97,7 +92,7 @@ class Board:
         self.ships.append(ship)
         self.contour(ship)
 
-    def contour(self, ship, verb=False):
+    def contour(self, ship, paint=False):
         """Метод для определения ближайших соседних к любому кораблю точек."""
         near = [
             (-1, -1), (-1, 0), (-1, 1),
@@ -106,11 +101,11 @@ class Board:
         ]
         for d in ship.dots:
             for dx, dy in near:
-                cur = Dot(d.x + dx, d.y + dy)
-                if not (self.out(cur)) and cur not in self.busy:
-                    if verb:
-                        self.field[cur.x][cur.y] = "."
-                    self.busy.append(cur)
+                current = Dot(d.x + dx, d.y + dy)
+                if not (self.out(current)) and current not in self.busy:
+                    if paint:
+                        self.field[current.x][current.y] = "."
+                    self.busy.append(current)
 
     def __str__(self):
         """Метод для построчного вывода нашего поля на основе шаблона строки + косметические доработки."""
@@ -133,7 +128,8 @@ class Board:
         # т.е.: НЕ(координаты x и y находятся внутри поля)
 
     def shot(self, d):
-        """Метод для выстрела со всеми необходимыми проверками."""
+        """Метод для выстрела со всеми необходимыми проверками и возвратом булевого
+        значения для понимания кто делает следующий ход."""
         # если точка в пределах игрового поля
         if self.out(d):
             raise BoardOutException()
@@ -149,33 +145,39 @@ class Board:
                 self.field[d.x][d.y] = "X"
                 if ship.lives == 0:
                     self.count += 1
-                    self.contour(ship, verb=True)
-                    print("Корабль уничтожен!")
+                    self.contour(ship, paint=True)
+                    print(" Ship destroyed!")
                     return True
                 else:
-                    print("Корабль ранен!")
+                    print(" Ship hitted!")
                     return True
 
         self.field[d.x][d.y] = "."
-        print("Мимо!")
+        print(" Miss!")
         return False
 
     def begin(self):
+        """Метод обнуляющий список занятых клеток в начале игры (мы ж ещё никуда не стреляли)."""
         self.busy = []
 
     def defeat(self):
-        return self.count == len(self.ships)
+        """Метод определения проигрыша."""
+        return self.count == len(self.ships)  # счётчик потопленных кораблей =
+                                              # = общему кол-ву кораблей на поле
 
 
 class Player:
+    """Класс-родитель для описания свойств и методов игрока."""
     def __init__(self, board, enemy):
         self.board = board
         self.enemy = enemy
 
     def ask(self):
+        """Метод, который просит у игрока координаты точки, в которую тот будет стрелять."""
         raise NotImplementedError()
 
     def move(self):
+        """Метод для совершения хода."""
         while True:
             try:
                 target = self.ask()
@@ -186,52 +188,61 @@ class Player:
 
 
 class AI(Player):
+    """Класс-наследник от Player. Наш ИИ."""
     def ask(self):
-        d = Dot(rndt(0, 9), rndt(0, 9))
-        print(f"Ход компьютера: {d.x + 1} {d.y + 1}")
-        return d
+        """Метод, генерирующий координаты точки для ИИ."""
+        dot = Dot(r_int(0, 9), r_int(0, 9))
+        print(f" Computer's turn: {dot.x + 1} {dot.y + 1}")
+        return dot
 
 
 class User(Player):
+    """Класс-наследник от Player. Наш игрок."""
     def ask(self):
+        """Метод, запрашивающий ввод координат точки у игрока."""
         while True:
-            cords = input("Ваш ход: ").split()
-
+            cords = input(" Your turn: ").split()
             if len(cords) != 2:
-                print(" Введите 2 координаты! ")
+                print(" Enter 2 coordinates!")
                 continue
-
             x, y = cords
-
             if not (x.isdigit()) or not (y.isdigit()):
-                print(" Введите числа! ")
+                print(" Enter numbers!")
                 continue
-
             x, y = int(x), int(y)
-
             return Dot(x - 1, y - 1)
 
 
 class Game:
+    """Класс для описания самой игры: генерация игровых полей, приветствие, цикл для совершения ходов и т.д."""
     def __init__(self, size=10):
         self.size = size
-        self.lens = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
+        self.lengths = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
         player = self.random_board()
         comp = self.random_board()
         comp.hid = True
-
         self.ai = AI(comp, player)
         self.us = User(player, comp)
 
+    @staticmethod
+    def greet():
+        """Косметический метод для приветствия и описания формата ввода данных."""
+        print("-" * 35)
+        print("  Welcome to The Sea Battle game!  ")
+        print("-" * 35)
+        print("       Format of data input: ")
+        print("             X(space)Y  ")
+
     def try_board(self):
+        """Метод для попытки автоматической расстановки кораблей на игровом поле."""
         board = Board(size=self.size)
         attempts = 0
-        for _ in self.lens:
+        for _ in self.lengths:
             while True:
                 attempts += 1
                 if attempts > 5000:
                     return None
-                ship = Ship(Dot(rndt(0, self.size), rndt(0, self.size)), _, rndt(0, 1))
+                ship = Ship(Dot(r_int(0, self.size), r_int(0, self.size)), _, r_int(0, 1))
                 try:
                     board.add_ship(ship)
                     break
@@ -241,39 +252,32 @@ class Game:
         return board
 
     def random_board(self):
+        """Метод, возвращающий готовое к игре поле, если его получилось создать."""
         board = None
         while board is None:
             board = self.try_board()
         return board
 
-    def greet(self):
-        print("-------------------")
-        print("  Приветсвуем Вас  ")
-        print("      в игре       ")
-        print("    морской бой    ")
-        print("-------------------")
-        print(" формат ввода: x y ")
-        print(" x - номер строки  ")
-        print(" y - номер столбца ")
-
     def print_boards(self):
-        print("-" * 20)
-        print("Доска пользователя:")
+        """Метод для вывода игровых полей на экран."""
+        print("-" * 35)
+        print(" Your board:")
         print(self.us.board)
-        print("-" * 20)
-        print("Доска компьютера:")
+        print("-" * 35)
+        print(" Computer's board:")
         print(self.ai.board)
-        print("-" * 20)
+        print("-" * 35)
 
     def loop(self):
+        """Метод для поочерёдного совершения ходов и проверки на проигрыш + остановки игры."""
         num = 0
         while True:
             self.print_boards()
             if num % 2 == 0:
-                print("Ходит пользователь!")
+                print(" Your turn!")
                 repeat = self.us.move()
             else:
-                print("Ходит компьютер!")
+                print(" Computer's turn!")
                 repeat = self.ai.move()
             if repeat:
                 num -= 1
@@ -281,20 +285,22 @@ class Game:
             if self.ai.board.defeat():
                 self.print_boards()
                 print("-" * 20)
-                print("Пользователь выиграл!")
+                print(" You won!")
                 break
 
             if self.us.board.defeat():
                 self.print_boards()
                 print("-" * 20)
-                print("Компьютер выиграл!")
+                print(" Computer won!")
                 break
             num += 1
 
     def start(self):
+        """Метод для запуска игры."""
         self.greet()
         self.loop()
 
 
-game = Game()
-game.start()
+if __name__ == "__main__":
+    # Вызываем метод start класса Game для начала игры.
+    Game().start()
