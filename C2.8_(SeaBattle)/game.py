@@ -284,13 +284,11 @@ class Game:
 
             if self.ai.board.defeat():
                 self.print_boards()
-                print("-" * 20)
                 print(" You won!")
                 break
 
             if self.us.board.defeat():
                 self.print_boards()
-                print("-" * 20)
                 print(" Computer won!")
                 break
             num += 1
