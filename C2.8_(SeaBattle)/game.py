@@ -1,5 +1,5 @@
 from random import randint as r_int
-from random import choice as ch
+from random import choice as r_ch
 
 
 class BoardException(Exception):
@@ -10,7 +10,7 @@ class BoardException(Exception):
 
 
 class BoardOutException(BoardException):
-    """Класс-наследник BoardException, который выбрасывает исключение при попытке
+    """Класс-наследник BoardException. Выбрасывает исключение при попытке
     сделать выстрел за пределы игрового поля."""
 
     def __str__(self) -> str:
@@ -55,8 +55,7 @@ class Ship:
         self.length = length
         # ориентация корабля (0 - вертикальная / 1 - горизонтальная)
         self.orient = orient
-        # количество "жизней" корабля (сколько ещё
-        # не подбитых палуб); по-умолчанию = длине корабля
+        # количество "жизней" корабля (сколько ещё не подбитых палуб); по-умолчанию = длине корабля
         self.lives = length
 
     @property
@@ -135,7 +134,6 @@ class Board:
             else:
                 line += f"\n{i + 1}| " + " | ".join(j) + " |"
         line += "\n(X)"
-
         if self.hid:
             line = line.replace("■", " ")  # тут мы реализуем условие скрытия кораблей нашего оппонента
         return line
@@ -143,35 +141,42 @@ class Board:
     def out(self, d) -> bool:
         """Метод проверки выхода координат точки за пределы игрового поля."""
         return not ((0 <= d.x < self.size) and (0 <= d.y < self.size))
-        # т.е.: НЕ(координаты x и y находятся внутри поля)
 
     def shot(self, d) -> bool:
         """Метод для выстрела со всеми необходимыми проверками и возвратом boolean
-        значения для понимания кто делает следующий ход."""
-        # точка в пределах игрового поля
+        значения для понимания кто делает следующий ход:
+        True - ход повторяется.
+        False - ход переходит сопернику."""
+        # точка за пределами игрового поля? - выбрасываем исключение
         if self.out(d):
             raise BoardOutException()
-        # точка, в которую НЕ делался выстрел
+        # в точку уже стреляли? - аналогично
         if d in self.busy:
             raise BoardUsedException()
-        # добавляем точку в список занятых точек
+        # но если всё ок, то добавляем точку в список занятых точек
         self.busy.append(d)
-
         for ship in self.ships:
+            # если попали палубу корабля
             if ship.shooted(d):
+                # отнимаем жизнь
                 ship.lives -= 1
                 self.field[d.x][d.y] = "X"
+                # добавляем точку в список подбитых точек
                 self.hits.append(d)
+                # если потопили корабль
                 if ship.lives == 0:
+                    # накручиваем счётчик
                     self.count += 1
+                    # обводим контур
                     self.contour(ship, paint=True)
                     print(" Ship destroyed!")
+                    # и обнуляем список подбитых точек, чтобы потом ИИ не тупил, когда будет пытаться
+                    # добить следующий раненый корабль
                     self.hits.clear()
                     return True
                 else:
                     print(" Ship hit.")
                     return True
-
         self.field[d.x][d.y] = "."
         print(" Miss.")
         return False
@@ -179,6 +184,10 @@ class Board:
     def begin(self) -> None:
         """Метод обнуляющий список занятых клеток в начале игры."""
         self.busy = []
+
+    def get_busy(self) -> list:
+        """Метод возвращающий список занятых клеток."""
+        return self.busy
 
     def get_hit(self) -> list:
         # возвращает список попаданий по палубам кораблей
@@ -210,42 +219,71 @@ class Player:
                 target = self.ask()
                 repeat = self.enemy.shot(target)
                 return repeat
-            except BoardException as e:
-                print(e)
+            except BoardException as fail:
+                print(fail)
 
 
 class AI(Player, Board):
-    """Класс-наследник от Player - наш ИИ."""
+    """Класс-наследник от Player и Board (т.к. взаимодействует
+    со списком раненых точек) - наш ИИ."""
 
     def ask(self) -> Dot:
         """Метод, генерирующий координаты точки выстрела для ИИ
         и логику добивания многопалубных кораблей."""
+        # берём список раненых точек
         hits = Board.get_hit(self.enemy)
-
+        # берём список занятых точек
+        busy = Board.get_busy(self.enemy)
+        # если он пустой, то стреляем случайным образом
         if not hits:
-            rand_dot = Dot(r_int(0, 9), r_int(0, 9))
-            print(f" Computer's turn: {rand_dot.x + 1} {rand_dot.y + 1}")
-            return rand_dot
-
+            while True:
+                rand_dot = Dot(r_int(0, 9), r_int(0, 9))
+                # делаем некоторые проверки, чтобы не повторяться в выстрелах
+                if (rand_dot not in busy) and not self.out(rand_dot)\
+                        and (rand_dot not in self.tries) and (rand_dot not in hits):
+                    print(f" Computer's turn: {rand_dot.x + 1} {rand_dot.y + 1}")
+                    return rand_dot
+                else:
+                    continue
+        # если в списке раненых точек 1 точка
         elif len(hits) == 1:
+            # достаём её
             last_hit = hits[-1]
+            # определяем 4 соседей в которые теперь точно есть смысл стрелять
             maybe_dots = [Dot(last_hit.x - 1, last_hit.y),
                           Dot(last_hit.x, last_hit.y + 1),
                           Dot(last_hit.x + 1, last_hit.y),
                           Dot(last_hit.x, last_hit.y - 1)]
-            while True:
-                maybe_hit = ch(maybe_dots)
+            # теперь, пока в списке соседей есть хоть одна точка
+            while maybe_dots:
+                # выбираем случайную из них
+                maybe_hit = r_ch(maybe_dots)
+                # сразу убираем её из списка соседей
                 maybe_dots.remove(maybe_hit)
-                if (maybe_hit not in self.busy) and not self.out(maybe_hit) and (maybe_hit not in self.tries):
+                # проверки на то, что эта выбранная точка:
+                # не в списке промахов,
+                # в пределах поля,
+                # не в списке точек по которым уже пытались добить корабль
+                # и не списке уже раненых палуб
+                if (maybe_hit not in busy) and not self.out(maybe_hit)\
+                        and (maybe_hit not in self.tries) and (maybe_hit not in hits):
+                    # добавляем эту точку в список попыток добить
                     self.tries.append(maybe_hit)
                     print(f" Computer's turn: {maybe_hit.x + 1} {maybe_hit.y + 1}")
+                    # и возвращаем эту точку как координату для очередного хода
                     return maybe_hit
+                # а если какое-то условие не выполняется, то пробуем снова
                 else:
                     continue
-
+        # тут у меня уже нет сил писать блок комментариев, но суть в том, что если
+        # у нас уже 2 подбитых точки, то сравниваются их координаты и находится общая.
+        # общая координата уже не меняется, т.к. ориентация корабля стала понятной,
+        # а другая координата меняется с приращением +1/-1 и +2/-2 от каждой из этих двух точек.
+        # не очень эффективно, но в этом диапазоне 100 % всегда будет весь корабль,
+        # даже если это 4-ёхпалубник
         else:
-            if hits[-1].x == hits[0].x:
-                last_hit = hits[-1]
+            if hits[1].x == hits[0].x:
+                last_hit = hits[1]
                 pre_last_hit = hits[0]
                 maybe_dots = [Dot(last_hit.x, last_hit.y - 1),
                               Dot(last_hit.x, last_hit.y + 1),
@@ -256,17 +294,18 @@ class AI(Player, Board):
                               Dot(pre_last_hit.x, pre_last_hit.y - 2),
                               Dot(pre_last_hit.x, pre_last_hit.y + 2)]
                 while True:
-                    maybe_hit = ch(maybe_dots)
+                    maybe_hit = r_ch(maybe_dots)
                     maybe_dots.remove(maybe_hit)
-                    if (maybe_hit not in self.busy) and not self.out(maybe_hit) and (maybe_hit not in self.tries):
+                    if (maybe_hit not in busy) and not self.out(maybe_hit)\
+                            and (maybe_hit not in self.tries) and (maybe_hit not in hits):
                         self.tries.append(maybe_hit)
                         print(f" Computer's turn: {maybe_hit.x + 1} {maybe_hit.y + 1}")
                         return maybe_hit
                     else:
                         continue
-            elif hits[-1].y == hits[0].y:
-                last_hit = hits[-1]
-                pre_last_hit = hits[-2]
+            elif hits[1].y == hits[0].y:
+                last_hit = hits[1]
+                pre_last_hit = hits[0]
                 maybe_dots = [Dot(last_hit.x - 1, last_hit.y),
                               Dot(last_hit.x + 1, last_hit.y),
                               Dot(pre_last_hit.x - 1, pre_last_hit.y),
@@ -276,9 +315,10 @@ class AI(Player, Board):
                               Dot(pre_last_hit.x - 2, pre_last_hit.y),
                               Dot(pre_last_hit.x + 2, pre_last_hit.y)]
                 while True:
-                    maybe_hit = ch(maybe_dots)
+                    maybe_hit = r_ch(maybe_dots)
                     maybe_dots.remove(maybe_hit)
-                    if (maybe_hit not in self.busy) and not self.out(maybe_hit) and (maybe_hit not in self.tries):
+                    if (maybe_hit not in busy) and not self.out(maybe_hit)\
+                            and (maybe_hit not in self.tries) and (maybe_hit not in hits):
                         self.tries.append(maybe_hit)
                         print(f" Computer's turn: {maybe_hit.x + 1} {maybe_hit.y + 1}")
                         return maybe_hit
